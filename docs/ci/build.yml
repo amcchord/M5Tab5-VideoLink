@@ -1,0 +1,38 @@
+# PlatformIO build workflow for M5Tab5-VideoLink.
+#
+# To enable CI, copy this file to .github/workflows/build.yml and push it with a
+# token that has the `workflow` scope (the GitHub web editor, or a PAT with
+# `workflow`). It builds the firmware on every push/PR.
+
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'src/idf_component.yml', 'sdkconfig.defaults') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build firmware
+        run: pio run

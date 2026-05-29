@@ -12,8 +12,10 @@ tablet hosting its own WiFi network).
 
 ## Status
 
-Early development. See [the design notes](docs/architecture.md) for the full
-architecture.
+Functional first pass: the full firmware builds cleanly for the Tab5 and all
+subsystems are implemented (camera, codecs, RTSP/RTP, audio, WiFi, mDNS, UI,
+settings). End-to-end behavior still needs validation on physical hardware —
+see "Known limitations" in [the design notes](docs/architecture.md).
 
 ## Features (target)
 
@@ -53,6 +55,41 @@ pio device monitor          # serial console @ 115200
 
 > The ESP32-C6 co-processor must be running `esp_hosted` slave firmware for
 > WiFi to work. See [docs/architecture.md](docs/architecture.md) for details.
+
+## Pairing two devices
+
+Flash both Tab5s. Then, in the on-device settings (tap the gear icon):
+
+1. On **device A**, set WiFi mode to **Create network (AP)**, give it a name +
+   password, and save. It now hosts a WiFi network.
+2. On **device B**, set WiFi mode to **Join network (STA)** and enter device A's
+   network name + password, and save.
+3. Once B joins A's network, the two discover each other over mDNS
+   (`_rtsp._tcp`) and the video link starts automatically in both directions.
+
+Alternatively, set **both** devices to **Join** the same existing WiFi network.
+
+## Continuous integration
+
+A ready-to-use PlatformIO build workflow lives at
+[`docs/ci/build.yml`](docs/ci/build.yml). Copy it to `.github/workflows/build.yml`
+(it is shipped outside that folder because adding workflows requires a token
+with the `workflow` scope) to build the firmware on every push/PR.
+
+## Project layout
+
+```
+src/
+  main.cpp            app entry / bring-up order
+  app/                settings (NVS), shared config
+  board/              BSP wrapper (display, touch, backlight, C6 power)
+  net/                wifi_manager (AP/STA), discovery (mDNS)
+  media/              camera (V4L2), codec abstraction (MJPEG/H.264),
+                      audio (RTP/L16), dual-core pipeline
+  rtsp/               rtp (RFC 2435/6184), rtsp_server, rtsp_client, link
+  ui/                 LVGL screens (video + gear-icon settings)
+boards/               vendored m5stack-tab5-p4 board definition
+```
 
 ## License
 
