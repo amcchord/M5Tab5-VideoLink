@@ -69,8 +69,13 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(settings::init());
     const settings::Config &cfg = settings::get();
 
-    // Media pipeline first so we learn the actual codec (H.264 may fall back to
-    // MJPEG), then bring up the link/audio with that codec, then networking.
+    // Bring up the TCP/IP stack (esp_netif/lwip) BEFORE anything creates a
+    // socket -- the RTSP server and audio modules open sockets, and lwip
+    // asserts if the tcpip thread/mbox isn't up yet.
+    bool wifi_ok = (net::wifi_init(on_wifi_status) == ESP_OK);
+
+    // Media pipeline next so we learn the actual codec (H.264 may fall back to
+    // MJPEG), then bring up the link/audio with that codec.
     media::Codec want = cfg.codec == settings::VideoCodec::H264 ? media::Codec::H264
                                                                 : media::Codec::MJPEG;
     esp_err_t merr = media::pipeline_start(want, cfg.quality, rtsp::link_on_encoded);
@@ -85,7 +90,7 @@ extern "C" void app_main(void)
         ESP_LOGW(TAG, "audio did not start");
     }
 
-    if (net::wifi_init(on_wifi_status) == ESP_OK) {
+    if (wifi_ok) {
         net::wifi_apply();
         const char *codec = actual == media::Codec::H264 ? "h264" : "mjpeg";
         net::discovery_start(cfg.device_name, VIDEOLINK_RTSP_PORT, codec, on_peer_found);

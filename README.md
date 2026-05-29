@@ -12,10 +12,11 @@ tablet hosting its own WiFi network).
 
 ## Status
 
-Functional first pass: the full firmware builds cleanly for the Tab5 and all
-subsystems are implemented (camera, codecs, RTSP/RTP, audio, WiFi, mDNS, UI,
-settings). End-to-end behavior still needs validation on physical hardware —
-see "Known limitations" in [the design notes](docs/architecture.md).
+Functional first pass, **verified booting on real Tab5 hardware**: display +
+touch, camera (SC202CS), MJPEG codec, RTSP server, audio (ES7210/ES8388), and
+WiFi via ESP-Hosted (SoftAP + mDNS) all initialize and run stably. The two-way
+live link still needs two units to fully exercise — see "Hardware bring-up
+status" in [the design notes](docs/architecture.md).
 
 ## Features (target)
 

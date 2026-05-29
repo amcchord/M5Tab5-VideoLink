@@ -12,6 +12,7 @@
 #include "esp_wifi_default.h"
 #include "esp_netif.h"
 #include "esp_event.h"
+#include "esp_hosted.h"
 
 static const char *TAG = "wifi";
 
@@ -85,6 +86,19 @@ esp_err_t wifi_init(wifi_status_cb_t cb)
 
     WCHECK(board::wifi_power_enable(true));
     vTaskDelay(pdMS_TO_TICKS(500)); // give the C6 time to boot
+
+    // ESP-Hosted must bring up the SDIO transport to the C6 and connect to the
+    // slave BEFORE the WiFi stack is initialized, otherwise esp_wifi_init fails
+    // with "Transport not initialized".
+    int herr = esp_hosted_init();
+    if (herr != 0) {
+        ESP_LOGE(TAG, "esp_hosted_init -> %d (check C6 slave firmware / SDIO pins)", herr);
+        return ESP_FAIL;
+    }
+    herr = esp_hosted_connect_to_slave();
+    if (herr != 0) {
+        ESP_LOGW(TAG, "esp_hosted_connect_to_slave -> %d", herr);
+    }
 
     WCHECK(esp_netif_init());
 

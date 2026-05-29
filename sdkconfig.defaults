@@ -30,6 +30,12 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # --- Compiler ---
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
+# --- Camera sensor (M5Stack Tab5 uses the SC202CS over MIPI-CSI) ---
+# All esp_cam_sensor drivers default off; enabling SC202CS lets esp_video detect
+# the sensor and create /dev/video0. (MIPI-CSI + ISP video devices are on by
+# default in esp_video.)
+CONFIG_CAMERA_SC202CS=y
+
 # --- LVGL ---
 # Canvas (video blit), plus keyboard/textarea for the settings screen.
 CONFIG_LV_USE_CANVAS=y

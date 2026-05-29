@@ -10,9 +10,9 @@ tablets. Each unit simultaneously **publishes** its own camera+mic and
   Hardware JPEG codec (encode + decode), hardware H.264 **encoder**, MIPI-CSI,
   MIPI-DSI, PPA, ISP.
 - **ESP32-C6** co-processor: provides WiFi over SDIO via ESP-Hosted.
-- **SC2356** 2 MP MIPI-CSI camera; **1280x720** MIPI-DSI display (ILI9881C or
-  ST7123 depending on hardware revision); **ES8388** speaker codec + **ES7210**
-  mic front-end.
+- **SC202CS** MIPI-CSI camera (detected PID 0xeb52); **1280x720** MIPI-DSI
+  display (ILI9881C or ST7123 depending on hardware revision); **ES8388**
+  speaker codec + **ES7210** mic front-end.
 
 ## Software stack
 
@@ -142,15 +142,24 @@ integrated ST7123. The BSP (v1.2.0+) includes both drivers. The build targets
 pre-rev3.0 **ES** silicon (`CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y`); newer rev3.x
 units should remove that from `sdkconfig.defaults`.
 
-## Known limitations / on-hardware validation TODOs
+## Hardware bring-up status
 
-This firmware compiles cleanly but the following need validation on physical
-hardware (the author developed it without two devices in hand):
+Verified booting on a physical Tab5 (chip rev v1.3, 32 MB PSRAM): display +
+touch (ST7123), camera (SC202CS, streaming RGB565), MJPEG encoder/decoder, RTSP
+server, audio codecs (ES7210/ES8388), and **WiFi via ESP-Hosted** — the C6 is
+reset over GPIO15, the SDIO link comes up on slot 1 with the Tab5 pins, the
+SoftAP starts (192.168.4.1), and mDNS advertises `_rtsp._tcp`. The full stack
+runs stably.
 
-- Camera output format/size: we request RGB565 at 640x360; the actual size
-  depends on the SC2356/ISP support and may need PPA downscaling.
-- H.264 path (color conversion, packing into the HW encoder's `O_UYY_E_VYY`
-  layout, FU-A reassembly, decode FPS) is experimental — MJPEG is the default.
-- ESP-Hosted SDIO pins/clock and C6 slave firmware version.
-- JPEG-engine encode/decode contention under full-duplex load.
+### Known limitations / remaining validation
+
+- **Two-device end-to-end** link (live video/audio both directions) needs two
+  units to exercise; single-device bring-up is verified.
+- Camera streams at the sensor's **native 1280x720** (the ISP does not freely
+  downscale); add a PPA downscale to hit the 640x360 target and cut bandwidth.
+- C6 slave firmware reports an old version (`Co-proc [0.0.0]`); updating the
+  ESP-Hosted slave firmware avoids potential RPC timeouts.
+- H.264 path (color conversion, `O_UYY_E_VYY` packing, FU-A, decode FPS) is
+  experimental — MJPEG is the default.
+- Internal RAM headroom is tight (~65 KB free) at 1280x720; downscaling helps.
 - Audio echo: AEC (ES7210) is present on the hardware but not yet enabled.

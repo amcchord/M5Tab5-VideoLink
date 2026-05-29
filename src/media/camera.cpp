@@ -46,13 +46,24 @@ esp_err_t camera_init(uint16_t want_w, uint16_t want_h)
 
     const int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
+    // Query the sensor's native resolution (the ISP does not freely downscale,
+    // so we capture at the native size and convert RAW8 -> RGB565 in the ISP).
     struct v4l2_format fmt = {};
     fmt.type = type;
-    fmt.fmt.pix.width = want_w;
-    fmt.fmt.pix.height = want_h;
+    uint16_t nw = want_w;
+    uint16_t nh = want_h;
+    if (ioctl(s_fd, VIDIOC_G_FMT, &fmt) == 0 && fmt.fmt.pix.width > 0) {
+        nw = fmt.fmt.pix.width;
+        nh = fmt.fmt.pix.height;
+    }
+
+    memset(&fmt, 0, sizeof(fmt));
+    fmt.type = type;
+    fmt.fmt.pix.width = nw;
+    fmt.fmt.pix.height = nh;
     fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB565;
     if (ioctl(s_fd, VIDIOC_S_FMT, &fmt) != 0) {
-        ESP_LOGW(TAG, "S_FMT RGB565 %ux%u not accepted; using current format", want_w, want_h);
+        ESP_LOGW(TAG, "S_FMT RGB565 %ux%u not accepted; using current format", nw, nh);
     }
 
     memset(&fmt, 0, sizeof(fmt));
@@ -61,10 +72,13 @@ esp_err_t camera_init(uint16_t want_w, uint16_t want_h)
         s_w = fmt.fmt.pix.width;
         s_h = fmt.fmt.pix.height;
     } else {
-        s_w = want_w;
-        s_h = want_h;
+        s_w = nw;
+        s_h = nh;
     }
-    ESP_LOGI(TAG, "camera streaming at %ux%u (RGB565)", s_w, s_h);
+    uint32_t fourcc = fmt.fmt.pix.pixelformat;
+    ESP_LOGI(TAG, "camera streaming at %ux%u fourcc=%c%c%c%c", s_w, s_h,
+             (char) (fourcc & 0xFF), (char) ((fourcc >> 8) & 0xFF),
+             (char) ((fourcc >> 16) & 0xFF), (char) ((fourcc >> 24) & 0xFF));
 
     struct v4l2_requestbuffers req = {};
     req.count = CAM_BUFFER_COUNT;

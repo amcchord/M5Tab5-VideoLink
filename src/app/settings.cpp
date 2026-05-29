@@ -11,7 +11,7 @@ static const char *TAG = "settings";
 
 #define NVS_NAMESPACE "videolink"
 #define NVS_BLOB_KEY  "config"
-#define CONFIG_VERSION 1u
+#define CONFIG_VERSION 2u
 
 namespace {
 
@@ -25,9 +25,13 @@ bool s_loaded = false;
 
 void make_default_name(char *out, size_t out_len)
 {
+    // Use the P4's own efuse base MAC: it is unique and available at boot
+    // (the WiFi MAC comes from the C6 and isn't ready until ESP-Hosted is up).
     uint8_t mac[6] = {0};
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    snprintf(out, out_len, "Tab5-%02X%02X", mac[4], mac[5]);
+    if (esp_read_mac(mac, ESP_MAC_BASE) != ESP_OK) {
+        esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY);
+    }
+    snprintf(out, out_len, "Tab5-%02X%02X%02X", mac[3], mac[4], mac[5]);
 }
 
 void load_defaults(settings::Config &c)
