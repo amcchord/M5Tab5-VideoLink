@@ -15,6 +15,7 @@ idf_component_register(
         esp_event
         esp_hw_support
         esp_netif
+        lwip
         esp_wifi
         esp_wifi_remote
         esp_hosted

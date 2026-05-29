@@ -19,19 +19,9 @@
 #include "net/wifi_manager.h"
 #include "net/discovery.h"
 #include "media/video_pipeline.h"
+#include "rtsp/link.h"
 
 static const char *TAG = "videolink";
-
-// Placeholder sink for locally-encoded frames until the RTSP/RTP layer is
-// wired in (next milestone). Keeps a frame counter for sanity logging.
-static void on_local_frame_encoded(const media::EncodedFrame &f)
-{
-    static uint32_t n = 0;
-    if ((++n % 30) == 0) {
-        ESP_LOGI(TAG, "encoded %u frames (last %ux%u, %u bytes)", n, f.width, f.height,
-                 (unsigned) f.size);
-    }
-}
 
 static void on_wifi_status(bool connected, esp_ip4_addr_t ip, const char *msg)
 {
@@ -49,6 +39,7 @@ static void on_peer_found(const net::Peer &peer)
     char line[80];
     snprintf(line, sizeof(line), "peer: %s", peer.name);
     ui::set_status(line);
+    rtsp::link_on_peer(peer);
 }
 
 static void init_nvs(void)
@@ -84,9 +75,11 @@ extern "C" void app_main(void)
         ui::set_status("WiFi unavailable");
     }
 
+    rtsp::link_start(VIDEOLINK_RTSP_PORT);
+
     media::Codec tx_codec = cfg.codec == settings::VideoCodec::H264 ? media::Codec::H264
                                                                     : media::Codec::MJPEG;
-    esp_err_t merr = media::pipeline_start(tx_codec, cfg.quality, on_local_frame_encoded);
+    esp_err_t merr = media::pipeline_start(tx_codec, cfg.quality, rtsp::link_on_encoded);
     if (merr != ESP_OK) {
         ESP_LOGW(TAG, "media pipeline did not start: %s", esp_err_to_name(merr));
     }
