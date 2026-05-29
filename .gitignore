@@ -23,3 +23,5 @@ build/
 *.bin
 *.elf
 *.map
+# ...but the vendored C6 co-processor firmware is a tracked asset
+!c6_firmware/network_adapter.bin

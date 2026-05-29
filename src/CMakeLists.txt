@@ -9,10 +9,12 @@ file(GLOB_RECURSE APP_SOURCES
 idf_component_register(
     SRCS ${APP_SOURCES}
     INCLUDE_DIRS "."
+    EMBED_FILES "${CMAKE_CURRENT_SOURCE_DIR}/../c6_firmware/network_adapter.bin"
     REQUIRES
         nvs_flash
         esp_timer
         esp_event
+        esp_system
         esp_hw_support
         esp_netif
         lwip

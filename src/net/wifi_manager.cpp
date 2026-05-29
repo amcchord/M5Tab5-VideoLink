@@ -4,6 +4,7 @@
 
 #include "app/settings.h"
 #include "board/board.h"
+#include "net/wifi_coproc.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -108,6 +109,11 @@ esp_err_t wifi_init(wifi_status_cb_t cb)
     if (herr != 0) {
         ESP_LOGW(TAG, "esp_hosted_connect_to_slave -> %d", herr);
     }
+
+    // If the C6 is running old/mismatched ESP-Hosted firmware (the stock Tab5
+    // image reports 0.0.0 and can't pass data), flash the embedded matching
+    // image over SDIO. This reboots the P4 on success and does not return.
+    coproc_update_if_needed();
 
     WCHECK(esp_netif_init());
 
