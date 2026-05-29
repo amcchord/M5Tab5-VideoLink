@@ -12,8 +12,10 @@ dependencies:
   # WiFi: the ESP32-P4 has no radio; the on-board ESP32-C6 provides it over SDIO
   # via ESP-Hosted. esp_wifi_remote forwards the standard esp_wifi_* APIs to it.
   espressif/esp_wifi_remote: "*"
+  # Pinned to match the embedded C6 slave firmware (c6_firmware/network_adapter.bin,
+  # built from this same version). Keep both in lockstep when bumping.
   espressif/esp_hosted:
-    version: "*"
+    version: "2.12.8"
     pre_release: true
 
   # mDNS / Bonjour peer discovery.
