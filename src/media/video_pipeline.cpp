@@ -94,8 +94,20 @@ esp_err_t pipeline_start(Codec tx_codec, uint8_t quality, encoded_cb_t on_encode
 
     s_enc = create_encoder(tx_codec);
     if (s_enc != nullptr) {
-        s_tx_codec = s_enc->codec();
-        s_enc->open(camera_width(), camera_height(), PixelFormat::RGB565, quality);
+        esp_err_t oerr = s_enc->open(camera_width(), camera_height(), PixelFormat::RGB565, quality);
+        if (oerr != ESP_OK && s_enc->codec() != Codec::MJPEG) {
+            ESP_LOGW(TAG, "%s encoder open failed (%s); falling back to MJPEG",
+                     s_enc->codec() == Codec::H264 ? "H264" : "?", esp_err_to_name(oerr));
+            s_enc->close();
+            delete s_enc;
+            s_enc = create_encoder(Codec::MJPEG);
+            if (s_enc != nullptr) {
+                s_enc->open(camera_width(), camera_height(), PixelFormat::RGB565, quality);
+            }
+        }
+        if (s_enc != nullptr) {
+            s_tx_codec = s_enc->codec();
+        }
     }
 
     // The decoder is created for our own tx codec for now (symmetric link). The
