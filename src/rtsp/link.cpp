@@ -23,7 +23,7 @@ namespace rtsp {
 void link_start(uint16_t rtsp_port, media::Codec codec)
 {
     s_codec = codec;
-    server_start(rtsp_port);
+    server_start(rtsp_port, codec);
 }
 
 void link_on_encoded(const media::EncodedFrame &frame)

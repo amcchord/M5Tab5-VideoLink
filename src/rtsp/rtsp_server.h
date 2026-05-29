@@ -6,9 +6,11 @@
 #include <cstdint>
 #include <cstddef>
 
+#include "media/media_types.h"
+
 namespace rtsp {
 
-void server_start(uint16_t rtsp_port);
+void server_start(uint16_t rtsp_port, media::Codec codec);
 
 // Packetize + send one frame to the connected client (no-op if none).
 void server_send_jpeg(const uint8_t *jpeg, size_t len);

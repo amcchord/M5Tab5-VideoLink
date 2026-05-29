@@ -26,6 +26,7 @@ bool s_streaming = false;
 struct sockaddr_in s_dest = {};
 uint16_t s_seq = 0;
 uint32_t s_ssrc = 0x32A1B3C4;
+media::Codec s_codec = media::Codec::MJPEG;
 
 void fmt_ip(uint32_t s_addr_net, char *out, size_t n)
 {
@@ -79,11 +80,23 @@ void handle_client(int c, const struct sockaddr_in *peer)
                      "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN\r\n\r\n", cseq);
             send_str(c, resp);
         } else if (strncmp(buf, "DESCRIBE", 8) == 0) {
+            char media_desc[160];
+            if (s_codec == media::Codec::H264) {
+                // packetization-mode=1 (FU-A); SPS/PPS are sent in-band with
+                // each IDR, so VLC/ffmpeg can sync without sprop-parameter-sets.
+                snprintf(media_desc, sizeof(media_desc),
+                         "m=video 0 RTP/AVP %d\r\na=rtpmap:%d H264/90000\r\n"
+                         "a=fmtp:%d packetization-mode=1\r\na=control:*\r\n",
+                         VIDEOLINK_RTP_PT_H264, VIDEOLINK_RTP_PT_H264, VIDEOLINK_RTP_PT_H264);
+            } else {
+                snprintf(media_desc, sizeof(media_desc),
+                         "m=video 0 RTP/AVP %d\r\na=rtpmap:%d JPEG/90000\r\na=control:*\r\n",
+                         VIDEOLINK_RTP_PT_JPEG, VIDEOLINK_RTP_PT_JPEG);
+            }
             char sdp[384];
             int sl = snprintf(sdp, sizeof(sdp),
-                              "v=0\r\no=- 0 0 IN IP4 %s\r\ns=VideoLink\r\nc=IN IP4 %s\r\nt=0 0\r\n"
-                              "m=video 0 RTP/AVP %d\r\na=rtpmap:%d JPEG/90000\r\na=control:*\r\n",
-                              our_ip, our_ip, VIDEOLINK_RTP_PT_JPEG, VIDEOLINK_RTP_PT_JPEG);
+                              "v=0\r\no=- 0 0 IN IP4 %s\r\ns=VideoLink\r\nc=IN IP4 %s\r\nt=0 0\r\n%s",
+                              our_ip, our_ip, media_desc);
             snprintf(resp, sizeof(resp),
                      "RTSP/1.0 200 OK\r\nCSeq: %d\r\nContent-Type: application/sdp\r\n"
                      "Content-Length: %d\r\n\r\n", cseq, sl);
@@ -171,8 +184,9 @@ void server_task(void *arg)
 
 namespace rtsp {
 
-void server_start(uint16_t rtsp_port)
+void server_start(uint16_t rtsp_port, media::Codec codec)
 {
+    s_codec = codec;
     s_lock = xSemaphoreCreateMutex();
     s_udp = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in la = {};
