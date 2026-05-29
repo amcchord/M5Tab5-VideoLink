@@ -20,7 +20,21 @@ esp_err_t init()
         return err;
     }
 
-    s_disp = bsp_display_start();
+    // Put the LVGL draw buffers in PSRAM (the BSP default puts them in internal
+    // DMA RAM). Internal SRAM is precious -- the WiFi co-processor link, the
+    // H.264 encoder's reference buffer and the I2S audio DMA all need it -- so
+    // freeing ~70-140KB here lets all of them coexist.
+    bsp_display_cfg_t disp_cfg = {
+        .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
+        .buffer_size = BSP_LCD_H_RES * CONFIG_BSP_LCD_DRAW_BUF_HEIGHT,
+        .double_buffer = true,
+        .flags = {
+            .buff_dma = false,
+            .buff_spiram = true,
+            .sw_rotate = true,
+        },
+    };
+    s_disp = bsp_display_start_with_config(&disp_cfg);
     if (s_disp == nullptr) {
         ESP_LOGE(TAG, "bsp_display_start failed");
         return ESP_FAIL;

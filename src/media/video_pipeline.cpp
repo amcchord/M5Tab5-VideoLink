@@ -12,8 +12,17 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
+#include "driver/ppa.h"
 
 static const char *TAG = "pipeline";
+
+// We encode/stream at this size (downscaled from the sensor's native 1280x720
+// with the PPA). Keeping it at 640x360 bounds the H.264 hardware encoder's
+// internal-RAM reference buffer (~45KB vs ~90KB at 720p) and the software
+// decode cost on the receiver, and cuts bandwidth.
+#define ENC_W VIDEOLINK_VIDEO_WIDTH
+#define ENC_H VIDEOLINK_VIDEO_HEIGHT
 
 namespace {
 
@@ -23,13 +32,41 @@ media::encoded_cb_t s_on_encoded = nullptr;
 media::Codec s_tx_codec = media::Codec::MJPEG;
 QueueHandle_t s_rx_q = nullptr;
 
+ppa_client_handle_t s_ppa = nullptr;
+uint8_t *s_enc_buf = nullptr; // downscaled RGB565 frame fed to the encoder
+
 struct RxItem {
     uint8_t *data;
     size_t size;
     media::Codec codec;
 };
 
-// Core 1: capture from camera, show local preview, encode, hand off to network.
+// Hardware-downscale a captured RGB565 frame into s_enc_buf (ENC_W x ENC_H).
+bool scale_to_enc(const media::RawFrame &raw)
+{
+    if (s_ppa == nullptr || s_enc_buf == nullptr) {
+        return false;
+    }
+    ppa_srm_oper_config_t op = {};
+    op.in.buffer = raw.data;
+    op.in.pic_w = raw.width;
+    op.in.pic_h = raw.height;
+    op.in.block_w = raw.width;
+    op.in.block_h = raw.height;
+    op.in.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+    op.out.buffer = s_enc_buf;
+    op.out.buffer_size = (uint32_t) (ENC_W * ENC_H * 2);
+    op.out.pic_w = ENC_W;
+    op.out.pic_h = ENC_H;
+    op.out.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+    op.rotation_angle = PPA_SRM_ROTATION_ANGLE_0;
+    op.scale_x = (float) ENC_W / (float) raw.width;
+    op.scale_y = (float) ENC_H / (float) raw.height;
+    op.mode = PPA_TRANS_MODE_BLOCKING;
+    return ppa_do_scale_rotate_mirror(s_ppa, &op) == ESP_OK;
+}
+
+// Core 1: capture from camera, downscale, show local preview, encode, hand off.
 void capture_encode_task(void *arg)
 {
     (void) arg;
@@ -40,15 +77,22 @@ void capture_encode_task(void *arg)
             continue;
         }
 
-        // Local self-view preview (overwritten by remote video once connected).
-        if (raw.format == media::PixelFormat::RGB565) {
-            ui::video_set_frame(raw.data, raw.width, raw.height);
-        }
+        if (raw.format == media::PixelFormat::RGB565 && scale_to_enc(raw)) {
+            media::RawFrame scaled = {};
+            scaled.data = s_enc_buf;
+            scaled.size = (size_t) ENC_W * ENC_H * 2;
+            scaled.width = ENC_W;
+            scaled.height = ENC_H;
+            scaled.format = media::PixelFormat::RGB565;
+            scaled.ts_us = raw.ts_us;
 
-        if (s_enc != nullptr && s_on_encoded != nullptr) {
-            media::EncodedFrame enc = {};
-            if (s_enc->encode(raw, enc) == ESP_OK) {
-                s_on_encoded(enc);
+            ui::video_set_frame(scaled.data, scaled.width, scaled.height);
+
+            if (s_enc != nullptr && s_on_encoded != nullptr) {
+                media::EncodedFrame enc = {};
+                if (s_enc->encode(scaled, enc) == ESP_OK) {
+                    s_on_encoded(enc);
+                }
             }
         }
         media::camera_release();
@@ -92,9 +136,19 @@ esp_err_t pipeline_start(Codec tx_codec, uint8_t quality, encoded_cb_t on_encode
         return err;
     }
 
+    // PPA scaler + downscaled encode buffer (camera native -> ENC_W x ENC_H).
+    ppa_client_config_t pc = {};
+    pc.oper_type = PPA_OPERATION_SRM;
+    ppa_register_client(&pc, &s_ppa);
+    s_enc_buf = (uint8_t *) heap_caps_aligned_alloc(128, (size_t) ENC_W * ENC_H * 2, MALLOC_CAP_SPIRAM);
+
+    ESP_LOGI(TAG, "encoding at %dx%d; internal heap free=%u largest=%u", ENC_W, ENC_H,
+             (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+
     s_enc = create_encoder(tx_codec);
     if (s_enc != nullptr) {
-        esp_err_t oerr = s_enc->open(camera_width(), camera_height(), PixelFormat::RGB565, quality);
+        esp_err_t oerr = s_enc->open(ENC_W, ENC_H, PixelFormat::RGB565, quality);
         if (oerr != ESP_OK && s_enc->codec() != Codec::MJPEG) {
             ESP_LOGW(TAG, "%s encoder open failed (%s); falling back to MJPEG",
                      s_enc->codec() == Codec::H264 ? "H264" : "?", esp_err_to_name(oerr));
@@ -102,7 +156,7 @@ esp_err_t pipeline_start(Codec tx_codec, uint8_t quality, encoded_cb_t on_encode
             delete s_enc;
             s_enc = create_encoder(Codec::MJPEG);
             if (s_enc != nullptr) {
-                s_enc->open(camera_width(), camera_height(), PixelFormat::RGB565, quality);
+                s_enc->open(ENC_W, ENC_H, PixelFormat::RGB565, quality);
             }
         }
         if (s_enc != nullptr) {

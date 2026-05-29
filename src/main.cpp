@@ -69,13 +69,11 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(settings::init());
     const settings::Config &cfg = settings::get();
 
-    // Bring up the TCP/IP stack (esp_netif/lwip) BEFORE anything creates a
-    // socket -- the RTSP server and audio modules open sockets, and lwip
-    // asserts if the tcpip thread/mbox isn't up yet.
-    bool wifi_ok = (net::wifi_init(on_wifi_status) == ESP_OK);
-
-    // Media pipeline next so we learn the actual codec (H.264 may fall back to
-    // MJPEG), then bring up the link/audio with that codec.
+    // Start the media pipeline FIRST -- before WiFi/audio fragment internal RAM.
+    // The H.264 hardware encoder needs a contiguous internal-RAM reference
+    // buffer (~45KB at 640x360); allocating it now, while internal RAM is still
+    // pristine, lets H.264 succeed instead of falling back to MJPEG. The
+    // pipeline creates no sockets, so it's safe to run before the TCP/IP stack.
     media::Codec want = cfg.codec == settings::VideoCodec::H264 ? media::Codec::H264
                                                                 : media::Codec::MJPEG;
     esp_err_t merr = media::pipeline_start(want, cfg.quality, rtsp::link_on_encoded);
@@ -83,6 +81,11 @@ extern "C" void app_main(void)
         ESP_LOGW(TAG, "media pipeline did not start: %s", esp_err_to_name(merr));
     }
     media::Codec actual = media::pipeline_tx_codec();
+
+    // Now bring up the TCP/IP stack (esp_netif/lwip) BEFORE anything creates a
+    // socket -- the RTSP server and audio modules open sockets, and lwip
+    // asserts if the tcpip thread/mbox isn't up yet.
+    bool wifi_ok = (net::wifi_init(on_wifi_status) == ESP_OK);
 
     rtsp::link_start(VIDEOLINK_RTSP_PORT, actual);
 
