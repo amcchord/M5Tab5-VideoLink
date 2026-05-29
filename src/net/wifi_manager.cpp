@@ -47,14 +47,22 @@ void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     if (base == WIFI_EVENT) {
         switch (id) {
         case WIFI_EVENT_STA_START:
+            ESP_LOGI(TAG, "STA started, connecting");
             esp_wifi_connect();
             break;
-        case WIFI_EVENT_STA_DISCONNECTED:
+        case WIFI_EVENT_STA_CONNECTED:
+            ESP_LOGI(TAG, "STA associated (L2 up), waiting for DHCP");
+            notify("connected, getting IP");
+            break;
+        case WIFI_EVENT_STA_DISCONNECTED: {
+            auto *d = static_cast<wifi_event_sta_disconnected_t *>(data);
+            ESP_LOGW(TAG, "STA disconnected (reason %d), retrying", d ? d->reason : -1);
             s_connected = false;
             notify("disconnected, retrying");
             vTaskDelay(pdMS_TO_TICKS(1500));
             esp_wifi_connect();
             break;
+        }
         case WIFI_EVENT_AP_START:
             s_connected = true;
             notify("network created");
@@ -72,6 +80,7 @@ void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         auto *e = static_cast<ip_event_got_ip_t *>(data);
         s_ip = e->ip_info.ip;
         s_connected = true;
+        ESP_LOGI(TAG, "got IP " IPSTR, IP2STR(&s_ip));
         notify("connected");
     }
 }
