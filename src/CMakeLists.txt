@@ -13,4 +13,7 @@ idf_component_register(
         nvs_flash
         esp_timer
         esp_event
+        m5stack_tab5
+        esp_lvgl_port
+        lvgl
 )

@@ -1,0 +1,10 @@
+## Managed third-party components, resolved by the ESP-IDF component manager.
+## (PlatformIO runs the component manager automatically for the "src" main
+## component.) Additional dependencies are added as subsystems come online.
+dependencies:
+  idf: ">=5.4"
+
+  # M5Stack Tab5 board support: display (ST7123/ILI9881C), touch (GT911/ST7123),
+  # audio (ES8388 + ES7210 via esp_codec_dev), camera (esp_video), IO expander.
+  # Transitively pulls esp_video, esp_lvgl_port, lvgl and esp_codec_dev.
+  espressif/m5stack_tab5: "^1.2.0"

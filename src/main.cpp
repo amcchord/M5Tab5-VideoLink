@@ -12,6 +12,9 @@
 #include "esp_heap_caps.h"
 #include "nvs_flash.h"
 
+#include "board/board.h"
+#include "ui/ui.h"
+
 static const char *TAG = "videolink";
 
 static void init_nvs(void)
@@ -33,7 +36,14 @@ extern "C" void app_main(void)
 
     init_nvs();
 
+    ESP_ERROR_CHECK(board::init());
+    ui::init();
+    ui::set_status("ready");
+
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
+        ESP_LOGI(TAG, "heap: int=%u psram=%u",
+                 (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned) heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
 }
