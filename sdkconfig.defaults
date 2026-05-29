@@ -4,6 +4,14 @@
 # added as the corresponding subsystems are integrated.
 # =============================================================================
 
+# --- Chip revision ---
+# The M5Stack Tab5 ships with pre-rev3.0 "ES" (engineering sample) ESP32-P4
+# silicon. Revisions <3.0 and >=3.0 have very different memory layouts and are
+# mutually exclusive in IDF, so we explicitly target the <3.0 layout. (If you
+# have a newer rev3.x unit, remove these two lines to use the production layout.)
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_0=y
+
 # --- CPU ---
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
 
