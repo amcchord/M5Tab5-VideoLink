@@ -25,6 +25,7 @@ idf_component_register(
         esp_video
         esp_h264
         esp_driver_jpeg
+        esp_driver_ppa
         esp_lvgl_port
         lvgl
         driver

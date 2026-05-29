@@ -35,6 +35,14 @@ CONFIG_COMPILER_OPTIMIZATION_PERF=y
 # the sensor and create /dev/video0. (MIPI-CSI + ISP video devices are on by
 # default in esp_video.)
 CONFIG_CAMERA_SC202CS=y
+CONFIG_CAMERA_SC202CS_DEFAULT_IPA_JSON_CONFIGURATION_FILE=y
+
+# The ISP pipeline controller runs the auto exposure / white balance / color
+# correction (IPA) algorithms against the live ISP statistics. Without it the
+# image is dark and green-tinted (raw demosaic, no AE/AWB). Stack in PSRAM to
+# spare internal RAM.
+CONFIG_ESP_VIDEO_ENABLE_ISP_PIPELINE_CONTROLLER=y
+CONFIG_ISP_PIPELINE_CONTROLLER_TASK_STACK_USE_PSRAM=y
 
 # --- LVGL ---
 # Canvas (video blit), plus keyboard/textarea for the settings screen.

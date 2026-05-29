@@ -9,8 +9,15 @@
 #include "lvgl.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "driver/ppa.h"
 
 static const char *TAG = "ui";
+
+// Fixed display size for the video canvas. Incoming frames (e.g. 1280x720) are
+// hardware-scaled (PPA) into this smaller buffer, which keeps the per-frame
+// copy and LVGL's software rotation cheap (~4x less work than full-res).
+#define VIDEO_DISP_W 640
+#define VIDEO_DISP_H 360
 
 static lv_obj_t *s_scr_main = nullptr;
 static lv_obj_t *s_scr_settings = nullptr;
@@ -18,8 +25,8 @@ static lv_obj_t *s_status_label = nullptr;
 static lv_obj_t *s_video_area = nullptr;
 static lv_obj_t *s_video_canvas = nullptr;
 static void *s_canvas_buf = nullptr;
-static int s_canvas_w = 0;
-static int s_canvas_h = 0;
+static ppa_client_handle_t s_ppa = nullptr;
+static bool s_ppa_ready = false;
 
 // Settings widgets.
 static lv_obj_t *s_mode_dd = nullptr;
@@ -305,28 +312,53 @@ void video_set_frame(const uint8_t *rgb565, int w, int h)
         return;
     }
     board::lock(0);
-    if (s_video_canvas == nullptr || w != s_canvas_w || h != s_canvas_h) {
-        if (s_video_canvas != nullptr) {
-            lv_obj_del(s_video_canvas);
-            s_video_canvas = nullptr;
-        }
-        if (s_canvas_buf != nullptr) {
-            heap_caps_free(s_canvas_buf);
-            s_canvas_buf = nullptr;
-        }
-        s_canvas_buf = heap_caps_malloc((size_t) w * h * 2, MALLOC_CAP_SPIRAM);
+
+    if (s_video_canvas == nullptr) {
+        ppa_client_config_t pc = {};
+        pc.oper_type = PPA_OPERATION_SRM;
+        s_ppa_ready = (ppa_register_client(&pc, &s_ppa) == ESP_OK);
+
+        const size_t sz = (size_t) VIDEO_DISP_W * VIDEO_DISP_H * 2;
+        s_canvas_buf = heap_caps_aligned_alloc(128, sz, MALLOC_CAP_SPIRAM);
         if (s_canvas_buf == nullptr) {
             board::unlock();
             return;
         }
         s_video_canvas = lv_canvas_create(s_video_area);
-        lv_canvas_set_buffer(s_video_canvas, s_canvas_buf, w, h, LV_COLOR_FORMAT_RGB565);
+        lv_canvas_set_buffer(s_video_canvas, s_canvas_buf, VIDEO_DISP_W, VIDEO_DISP_H,
+                             LV_COLOR_FORMAT_RGB565);
         lv_obj_center(s_video_canvas);
-        s_canvas_w = w;
-        s_canvas_h = h;
     }
-    memcpy(s_canvas_buf, rgb565, (size_t) w * h * 2);
-    lv_obj_invalidate(s_video_canvas);
+
+    bool updated = false;
+    if (s_ppa_ready) {
+        ppa_srm_oper_config_t op = {};
+        op.in.buffer = rgb565;
+        op.in.pic_w = (uint32_t) w;
+        op.in.pic_h = (uint32_t) h;
+        op.in.block_w = (uint32_t) w;
+        op.in.block_h = (uint32_t) h;
+        op.in.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+        op.out.buffer = s_canvas_buf;
+        op.out.buffer_size = (uint32_t) (VIDEO_DISP_W * VIDEO_DISP_H * 2);
+        op.out.pic_w = VIDEO_DISP_W;
+        op.out.pic_h = VIDEO_DISP_H;
+        op.out.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+        op.rotation_angle = PPA_SRM_ROTATION_ANGLE_0;
+        op.scale_x = (float) VIDEO_DISP_W / (float) w;
+        op.scale_y = (float) VIDEO_DISP_H / (float) h;
+        op.mode = PPA_TRANS_MODE_BLOCKING;
+        if (ppa_do_scale_rotate_mirror(s_ppa, &op) == ESP_OK) {
+            updated = true;
+        }
+    } else if (w == VIDEO_DISP_W && h == VIDEO_DISP_H) {
+        memcpy(s_canvas_buf, rgb565, (size_t) w * h * 2);
+        updated = true;
+    }
+
+    if (updated) {
+        lv_obj_invalidate(s_video_canvas);
+    }
     board::unlock();
 }
 
