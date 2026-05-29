@@ -26,6 +26,11 @@ esp_err_t init()
         return ESP_FAIL;
     }
 
+    // The panel is natively portrait (720x1280); rotate 90 degrees for
+    // landscape use. The BSP enables software rotation and esp_lvgl_port also
+    // rotates touch input to match. (Use LV_DISP_ROTATION_270 to flip 180.)
+    bsp_display_rotate(s_disp, LV_DISP_ROTATION_90);
+
     set_brightness(80);
     ESP_LOGI(TAG, "Display up: %dx%d",
              (int) lv_display_get_horizontal_resolution(s_disp),
