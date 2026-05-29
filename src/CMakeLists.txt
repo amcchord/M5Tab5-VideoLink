@@ -1,0 +1,16 @@
+# The PlatformIO "src" directory is the ESP-IDF "main" component.
+# All application sources live here (recursively) and third-party libraries are
+# pulled in as managed components (see src/idf_component.yml).
+
+file(GLOB_RECURSE APP_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+
+idf_component_register(
+    SRCS ${APP_SOURCES}
+    INCLUDE_DIRS "."
+    REQUIRES
+        nvs_flash
+        esp_timer
+        esp_event
+)

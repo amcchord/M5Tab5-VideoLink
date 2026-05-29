@@ -1,0 +1,9 @@
+# Partition table for M5Stack Tab5 (ESP32-P4, 16 MB flash).
+# A single large app partition is used (no OTA) so the media + networking
+# stacks fit comfortably, plus NVS for persisted settings and a SPIFFS area
+# for assets / future use.
+# Name,     Type, SubType,  Offset,    Size
+nvs,        data, nvs,      0x9000,    0x6000
+phy_init,   data, phy,      0xf000,    0x1000
+factory,    app,  factory,  0x10000,   0xB00000
+storage,    data, spiffs,   0xB10000,  0x4F0000

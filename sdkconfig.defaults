@@ -1,0 +1,20 @@
+# =============================================================================
+# Default sdkconfig for M5Tab5-VideoLink (ESP32-P4).
+# PlatformIO applies these on first configure. Component-specific options are
+# added as the corresponding subsystems are integrated.
+# =============================================================================
+
+# --- CPU ---
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
+
+# --- External SPI RAM (32 MB on the Tab5) ---
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+
+# --- FreeRTOS / main task ---
+CONFIG_FREERTOS_HZ=1000
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# --- Compiler ---
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
