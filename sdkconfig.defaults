@@ -30,6 +30,10 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # --- Compiler ---
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
+# --- LVGL ---
+# Canvas widget is used to blit decoded video frames onto the display.
+CONFIG_LV_USE_CANVAS=y
+
 # =============================================================================
 # WiFi via the on-board ESP32-C6 co-processor (ESP-Hosted + esp_wifi_remote).
 # =============================================================================

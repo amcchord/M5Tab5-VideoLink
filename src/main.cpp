@@ -18,8 +18,20 @@
 #include "app/app_config.h"
 #include "net/wifi_manager.h"
 #include "net/discovery.h"
+#include "media/video_pipeline.h"
 
 static const char *TAG = "videolink";
+
+// Placeholder sink for locally-encoded frames until the RTSP/RTP layer is
+// wired in (next milestone). Keeps a frame counter for sanity logging.
+static void on_local_frame_encoded(const media::EncodedFrame &f)
+{
+    static uint32_t n = 0;
+    if ((++n % 30) == 0) {
+        ESP_LOGI(TAG, "encoded %u frames (last %ux%u, %u bytes)", n, f.width, f.height,
+                 (unsigned) f.size);
+    }
+}
 
 static void on_wifi_status(bool connected, esp_ip4_addr_t ip, const char *msg)
 {
@@ -70,6 +82,13 @@ extern "C" void app_main(void)
         net::discovery_start(cfg.device_name, VIDEOLINK_RTSP_PORT, codec, on_peer_found);
     } else {
         ui::set_status("WiFi unavailable");
+    }
+
+    media::Codec tx_codec = cfg.codec == settings::VideoCodec::H264 ? media::Codec::H264
+                                                                    : media::Codec::MJPEG;
+    esp_err_t merr = media::pipeline_start(tx_codec, cfg.quality, on_local_frame_encoded);
+    if (merr != ESP_OK) {
+        ESP_LOGW(TAG, "media pipeline did not start: %s", esp_err_to_name(merr));
     }
 
     while (true) {

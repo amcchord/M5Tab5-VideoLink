@@ -1,8 +1,11 @@
 #include "ui/ui.h"
 
+#include <cstring>
+
 #include "board/board.h"
 #include "lvgl.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 
 static const char *TAG = "ui";
 
@@ -10,6 +13,10 @@ static lv_obj_t *s_scr_main = nullptr;
 static lv_obj_t *s_scr_settings = nullptr;
 static lv_obj_t *s_status_label = nullptr;
 static lv_obj_t *s_video_area = nullptr;
+static lv_obj_t *s_video_canvas = nullptr;
+static void *s_canvas_buf = nullptr;
+static int s_canvas_w = 0;
+static int s_canvas_h = 0;
 
 static void gear_event_cb(lv_event_t *e)
 {
@@ -99,6 +106,37 @@ void set_status(const char *text)
     }
     board::lock(0);
     lv_label_set_text(s_status_label, text);
+    board::unlock();
+}
+
+void video_set_frame(const uint8_t *rgb565, int w, int h)
+{
+    if (s_video_area == nullptr || rgb565 == nullptr || w <= 0 || h <= 0) {
+        return;
+    }
+    board::lock(0);
+    if (s_video_canvas == nullptr || w != s_canvas_w || h != s_canvas_h) {
+        if (s_video_canvas != nullptr) {
+            lv_obj_del(s_video_canvas);
+            s_video_canvas = nullptr;
+        }
+        if (s_canvas_buf != nullptr) {
+            heap_caps_free(s_canvas_buf);
+            s_canvas_buf = nullptr;
+        }
+        s_canvas_buf = heap_caps_malloc((size_t) w * h * 2, MALLOC_CAP_SPIRAM);
+        if (s_canvas_buf == nullptr) {
+            board::unlock();
+            return;
+        }
+        s_video_canvas = lv_canvas_create(s_video_area);
+        lv_canvas_set_buffer(s_video_canvas, s_canvas_buf, w, h, LV_COLOR_FORMAT_RGB565);
+        lv_obj_center(s_video_canvas);
+        s_canvas_w = w;
+        s_canvas_h = h;
+    }
+    memcpy(s_canvas_buf, rgb565, (size_t) w * h * 2);
+    lv_obj_invalidate(s_video_canvas);
     board::unlock();
 }
 
