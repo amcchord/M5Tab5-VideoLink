@@ -23,6 +23,7 @@ idf_component_register(
         m5stack_tab5
         esp_codec_dev
         esp_video
+        esp_h264
         esp_driver_jpeg
         esp_lvgl_port
         lvgl

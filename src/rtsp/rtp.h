@@ -21,6 +21,11 @@ static const uint32_t RTP_CLOCK_HZ = 90000;
 int rtp_send_jpeg(int sock, const sockaddr_in *dest, const uint8_t *jpeg, size_t jpeg_len,
                   uint16_t *seq, uint32_t ssrc, uint32_t ts);
 
+// Send one H.264 access unit (Annex-B byte stream) as RTP packets per RFC 6184
+// (single-NAL and FU-A fragmentation), with PT 96.
+int rtp_send_h264(int sock, const sockaddr_in *dest, const uint8_t *annexb, size_t len,
+                  uint16_t *seq, uint32_t ssrc, uint32_t ts);
+
 // Reassembles RTP/JPEG packets into whole JPEG frames.
 class RtpJpegReassembler {
 public:
@@ -41,6 +46,22 @@ private:
     size_t scan_len_ = 0;        // bytes of scan data accumulated
     uint32_t cur_ts_ = 0;
     bool have_header_ = false;
+};
+
+// Reassembles RTP/H.264 (RFC 6184) packets into Annex-B access units.
+class RtpH264Reassembler {
+public:
+    typedef void (*frame_cb_t)(const uint8_t *annexb, size_t len, void *user);
+
+    void init(frame_cb_t cb, void *user);
+    void feed(const uint8_t *pkt, size_t len);
+
+private:
+    frame_cb_t cb_ = nullptr;
+    void *user_ = nullptr;
+    uint8_t *frame_ = nullptr;
+    size_t frame_cap_ = 0;
+    size_t len_ = 0;
 };
 
 } // namespace rtsp

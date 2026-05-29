@@ -19,14 +19,16 @@ namespace {
 
 volatile bool s_running = false;
 uint32_t s_peer_addr = 0;
-rtsp::client_jpeg_cb_t s_cb = nullptr;
-rtsp::RtpJpegReassembler s_reasm;
+rtsp::client_frame_cb_t s_cb = nullptr;
+media::Codec s_codec = media::Codec::MJPEG;
+rtsp::RtpJpegReassembler s_jpeg_reasm;
+rtsp::RtpH264Reassembler s_h264_reasm;
 
-void on_reasm_frame(const uint8_t *jpeg, size_t len, void *user)
+void on_reasm_frame(const uint8_t *frame, size_t len, void *user)
 {
     (void) user;
     if (s_cb) {
-        s_cb(jpeg, len);
+        s_cb(frame, len);
     }
 }
 
@@ -104,12 +106,21 @@ void client_task(void *arg)
     struct timeval tv = {.tv_sec = 1, .tv_usec = 0};
     setsockopt(udp, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-    s_reasm.init(on_reasm_frame, nullptr);
+    bool h264 = (s_codec == media::Codec::H264);
+    if (h264) {
+        s_h264_reasm.init(on_reasm_frame, nullptr);
+    } else {
+        s_jpeg_reasm.init(on_reasm_frame, nullptr);
+    }
     uint8_t *pkt = (uint8_t *) malloc(1600);
     while (s_running) {
         int n = recvfrom(udp, pkt, 1600, 0, nullptr, nullptr);
         if (n > 0) {
-            s_reasm.feed(pkt, (size_t) n);
+            if (h264) {
+                s_h264_reasm.feed(pkt, (size_t) n);
+            } else {
+                s_jpeg_reasm.feed(pkt, (size_t) n);
+            }
         } else {
             // timeout: send an RTSP keepalive (GET_PARAMETER-ish via OPTIONS)
             snprintf(req, sizeof(req), "OPTIONS %s RTSP/1.0\r\nCSeq: %d\r\n\r\n", base, cseq++);
@@ -127,13 +138,14 @@ void client_task(void *arg)
 
 namespace rtsp {
 
-void client_connect(esp_ip4_addr_t ip, uint16_t rtsp_port, client_jpeg_cb_t cb)
+void client_connect(esp_ip4_addr_t ip, uint16_t rtsp_port, media::Codec codec, client_frame_cb_t cb)
 {
     (void) rtsp_port; // we use VIDEOLINK_RTSP_PORT
     if (s_running) {
         return; // already connected to a peer
     }
     s_cb = cb;
+    s_codec = codec;
     s_peer_addr = ip.addr;
     s_running = true;
     xTaskCreatePinnedToCore(client_task, "rtsp_cli", 6144, nullptr, 5, nullptr, 0);

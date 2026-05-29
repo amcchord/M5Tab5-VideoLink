@@ -9,7 +9,7 @@
 
 namespace rtsp {
 
-void link_start(uint16_t rtsp_port);
+void link_start(uint16_t rtsp_port, media::Codec codec);
 
 // Pass to media::pipeline_start as the encoded-frame sink (sends to the peer).
 void link_on_encoded(const media::EncodedFrame &frame);

@@ -9,33 +9,37 @@ static const char *TAG = "link";
 
 namespace {
 
-void on_client_jpeg(const uint8_t *jpeg, size_t len)
+media::Codec s_codec = media::Codec::MJPEG;
+
+void on_client_frame(const uint8_t *frame, size_t len)
 {
-    media::pipeline_submit_remote(jpeg, len, media::Codec::MJPEG);
+    media::pipeline_submit_remote(frame, len, s_codec);
 }
 
 } // namespace
 
 namespace rtsp {
 
-void link_start(uint16_t rtsp_port)
+void link_start(uint16_t rtsp_port, media::Codec codec)
 {
+    s_codec = codec;
     server_start(rtsp_port);
 }
 
 void link_on_encoded(const media::EncodedFrame &frame)
 {
-    if (frame.codec == media::Codec::MJPEG) {
+    if (frame.codec == media::Codec::H264) {
+        server_send_h264(frame.data, frame.size);
+    } else {
         server_send_jpeg(frame.data, frame.size);
     }
-    // H.264 (RFC 6184) packetization is added in the H.264 milestone.
 }
 
 void link_on_peer(const net::Peer &peer)
 {
     if (!client_connected()) {
         ESP_LOGI(TAG, "connecting to peer %s", peer.name);
-        client_connect(peer.ip, peer.port, on_client_jpeg);
+        client_connect(peer.ip, peer.port, s_codec, on_client_frame);
     }
 }
 

@@ -204,6 +204,27 @@ void server_send_jpeg(const uint8_t *jpeg, size_t len)
     xSemaphoreGive(s_lock);
 }
 
+void server_send_h264(const uint8_t *annexb, size_t len)
+{
+    if (s_lock == nullptr) {
+        return;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool go = s_streaming && s_udp >= 0;
+    struct sockaddr_in dest = s_dest;
+    uint16_t seq = s_seq;
+    uint32_t ssrc = s_ssrc;
+    xSemaphoreGive(s_lock);
+    if (!go) {
+        return;
+    }
+    uint32_t ts = (uint32_t) (esp_timer_get_time() * 9 / 100);
+    rtp_send_h264(s_udp, &dest, annexb, len, &seq, ssrc, ts);
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_seq = seq;
+    xSemaphoreGive(s_lock);
+}
+
 bool server_has_client()
 {
     return s_streaming;

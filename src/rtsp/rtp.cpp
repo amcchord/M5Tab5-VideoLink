@@ -12,6 +12,7 @@ static const char *TAG = "rtp";
 // Largest UDP payload we emit (keeps us under a typical 1500-byte MTU).
 #define RTP_MAX_PACKET 1400
 #define RTP_PT_JPEG    26
+#define RTP_PT_H264    96
 
 namespace {
 
@@ -357,6 +358,156 @@ void RtpJpegReassembler::feed(const uint8_t *pkt, size_t len)
             cb_(frame_, total, user_);
         }
         reset_frame();
+    }
+}
+
+// --------------------------- H.264 (RFC 6184) -------------------------------
+
+namespace {
+
+struct Nal {
+    const uint8_t *p;
+    size_t len;
+};
+
+// Split an Annex-B byte stream into NAL units (start codes 00 00 01 / 00 00 00 01).
+int split_nals(const uint8_t *buf, size_t n, Nal *out, int max)
+{
+    int count = 0;
+    size_t pos = 0;
+    // Skip to first start code.
+    while (pos + 3 <= n && !(buf[pos] == 0 && buf[pos + 1] == 0 && buf[pos + 2] == 1)) {
+        pos++;
+    }
+    pos += 3;
+    while (pos < n && count < max) {
+        size_t e = pos;
+        while (e + 3 <= n && !(buf[e] == 0 && buf[e + 1] == 0 && buf[e + 2] == 1)) {
+            e++;
+        }
+        size_t nal_end = (e + 3 <= n) ? e : n;
+        if (nal_end > pos && buf[nal_end - 1] == 0) {
+            nal_end--; // trim leading zero of a 4-byte start code
+        }
+        out[count].p = buf + pos;
+        out[count].len = nal_end - pos;
+        count++;
+        pos = e + 3;
+    }
+    return count;
+}
+
+} // namespace
+
+int rtp_send_h264(int sock, const sockaddr_in *dest, const uint8_t *annexb, size_t len,
+                  uint16_t *seq, uint32_t ssrc, uint32_t ts)
+{
+    Nal nals[64];
+    int count = split_nals(annexb, len, nals, 64);
+    if (count <= 0) {
+        return -1;
+    }
+
+    uint8_t pkt[RTP_MAX_PACKET + 16];
+    for (int k = 0; k < count; k++) {
+        bool last_nal = (k == count - 1);
+        const uint8_t *nal = nals[k].p;
+        size_t nl = nals[k].len;
+        if (nl == 0) {
+            continue;
+        }
+
+        if (nl + 12 <= RTP_MAX_PACKET) {
+            uint8_t *p = pkt;
+            p[0] = 0x80;
+            p[1] = (uint8_t) (RTP_PT_H264 | (last_nal ? 0x80 : 0x00));
+            p[2] = (*seq >> 8) & 0xFF;
+            p[3] = *seq & 0xFF;
+            wr32(p + 4, ts);
+            wr32(p + 8, ssrc);
+            memcpy(p + 12, nal, nl);
+            sendto(sock, pkt, 12 + nl, 0, (const struct sockaddr *) dest, sizeof(*dest));
+            (*seq)++;
+        } else {
+            uint8_t nal_hdr = nal[0];
+            uint8_t nri = nal_hdr & 0x60;
+            uint8_t type = nal_hdr & 0x1F;
+            const uint8_t *d = nal + 1;
+            size_t rem = nl - 1;
+            bool start = true;
+            while (rem > 0) {
+                size_t chunk = rem > (RTP_MAX_PACKET - 14) ? (RTP_MAX_PACKET - 14) : rem;
+                bool end = (chunk == rem);
+                uint8_t *p = pkt;
+                p[0] = 0x80;
+                p[1] = (uint8_t) (RTP_PT_H264 | ((last_nal && end) ? 0x80 : 0x00));
+                p[2] = (*seq >> 8) & 0xFF;
+                p[3] = *seq & 0xFF;
+                wr32(p + 4, ts);
+                wr32(p + 8, ssrc);
+                p[12] = nri | 28;                                  // FU indicator
+                p[13] = (uint8_t) ((start ? 0x80 : 0) | (end ? 0x40 : 0) | type); // FU header
+                memcpy(p + 14, d, chunk);
+                sendto(sock, pkt, 14 + chunk, 0, (const struct sockaddr *) dest, sizeof(*dest));
+                (*seq)++;
+                start = false;
+                d += chunk;
+                rem -= chunk;
+            }
+        }
+    }
+    return 0;
+}
+
+void RtpH264Reassembler::init(frame_cb_t cb, void *user)
+{
+    cb_ = cb;
+    user_ = user;
+    frame_cap_ = 256 * 1024;
+    frame_ = (uint8_t *) heap_caps_malloc(frame_cap_, MALLOC_CAP_SPIRAM);
+    len_ = 0;
+}
+
+void RtpH264Reassembler::feed(const uint8_t *pkt, size_t len)
+{
+    if (frame_ == nullptr || len < 13) {
+        return;
+    }
+    static const uint8_t kStartCode[4] = {0, 0, 0, 1};
+    bool marker = (pkt[1] & 0x80) != 0;
+    const uint8_t *payload = pkt + 12;
+    size_t paylen = len - 12;
+    uint8_t t = payload[0] & 0x1F;
+
+    auto append = [&](const uint8_t *d, size_t n) {
+        if (len_ + n <= frame_cap_) {
+            memcpy(frame_ + len_, d, n);
+            len_ += n;
+        }
+    };
+
+    if (t >= 1 && t <= 23) {
+        append(kStartCode, 4);
+        append(payload, paylen);
+    } else if (t == 28) {
+        if (paylen < 2) {
+            return;
+        }
+        uint8_t fu_ind = payload[0];
+        uint8_t fu_hdr = payload[1];
+        if (fu_hdr & 0x80) { // start of a fragmented NAL
+            append(kStartCode, 4);
+            uint8_t nal_hdr = (uint8_t) ((fu_ind & 0xE0) | (fu_hdr & 0x1F));
+            append(&nal_hdr, 1);
+        }
+        append(payload + 2, paylen - 2);
+    }
+
+    if (marker && len_ > 0) {
+        if (cb_) {
+            cb_(frame_, len_, user_);
+        }
+        len_ = 0;
     }
 }
 

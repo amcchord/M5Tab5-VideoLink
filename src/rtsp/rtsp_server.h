@@ -10,8 +10,9 @@ namespace rtsp {
 
 void server_start(uint16_t rtsp_port);
 
-// Packetize + send one JPEG frame to the connected client (no-op if none).
+// Packetize + send one frame to the connected client (no-op if none).
 void server_send_jpeg(const uint8_t *jpeg, size_t len);
+void server_send_h264(const uint8_t *annexb, size_t len);
 
 bool server_has_client();
 

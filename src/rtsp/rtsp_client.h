@@ -7,12 +7,14 @@
 #include <cstddef>
 
 #include "esp_netif_ip_addr.h"
+#include "media/media_types.h"
 
 namespace rtsp {
 
-typedef void (*client_jpeg_cb_t)(const uint8_t *jpeg, size_t len);
+// Callback receives a reassembled elementary frame (JPEG or H.264 Annex-B).
+typedef void (*client_frame_cb_t)(const uint8_t *frame, size_t len);
 
-void client_connect(esp_ip4_addr_t ip, uint16_t rtsp_port, client_jpeg_cb_t cb);
+void client_connect(esp_ip4_addr_t ip, uint16_t rtsp_port, media::Codec codec, client_frame_cb_t cb);
 void client_stop();
 bool client_connected();
 

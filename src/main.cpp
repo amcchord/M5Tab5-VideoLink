@@ -69,25 +69,28 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(settings::init());
     const settings::Config &cfg = settings::get();
 
-    if (net::wifi_init(on_wifi_status) == ESP_OK) {
-        net::wifi_apply();
-        const char *codec = cfg.codec == settings::VideoCodec::H264 ? "h264" : "mjpeg";
-        net::discovery_start(cfg.device_name, VIDEOLINK_RTSP_PORT, codec, on_peer_found);
-    } else {
-        ui::set_status("WiFi unavailable");
-    }
-
-    rtsp::link_start(VIDEOLINK_RTSP_PORT);
-
-    media::Codec tx_codec = cfg.codec == settings::VideoCodec::H264 ? media::Codec::H264
-                                                                    : media::Codec::MJPEG;
-    esp_err_t merr = media::pipeline_start(tx_codec, cfg.quality, rtsp::link_on_encoded);
+    // Media pipeline first so we learn the actual codec (H.264 may fall back to
+    // MJPEG), then bring up the link/audio with that codec, then networking.
+    media::Codec want = cfg.codec == settings::VideoCodec::H264 ? media::Codec::H264
+                                                                : media::Codec::MJPEG;
+    esp_err_t merr = media::pipeline_start(want, cfg.quality, rtsp::link_on_encoded);
     if (merr != ESP_OK) {
         ESP_LOGW(TAG, "media pipeline did not start: %s", esp_err_to_name(merr));
     }
+    media::Codec actual = media::pipeline_tx_codec();
+
+    rtsp::link_start(VIDEOLINK_RTSP_PORT, actual);
 
     if (media::audio_init(cfg.volume, cfg.mic_gain, cfg.mic_muted) != ESP_OK) {
         ESP_LOGW(TAG, "audio did not start");
+    }
+
+    if (net::wifi_init(on_wifi_status) == ESP_OK) {
+        net::wifi_apply();
+        const char *codec = actual == media::Codec::H264 ? "h264" : "mjpeg";
+        net::discovery_start(cfg.device_name, VIDEOLINK_RTSP_PORT, codec, on_peer_found);
+    } else {
+        ui::set_status("WiFi unavailable");
     }
 
     while (true) {
