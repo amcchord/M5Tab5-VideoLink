@@ -13,7 +13,14 @@ idf_component_register(
         nvs_flash
         esp_timer
         esp_event
+        esp_hw_support
+        esp_netif
+        esp_wifi
+        esp_wifi_remote
+        esp_hosted
+        mdns
         m5stack_tab5
         esp_lvgl_port
         lvgl
+        driver
 )

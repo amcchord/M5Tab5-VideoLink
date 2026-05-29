@@ -8,3 +8,13 @@ dependencies:
   # audio (ES8388 + ES7210 via esp_codec_dev), camera (esp_video), IO expander.
   # Transitively pulls esp_video, esp_lvgl_port, lvgl and esp_codec_dev.
   espressif/m5stack_tab5: "^1.2.0"
+
+  # WiFi: the ESP32-P4 has no radio; the on-board ESP32-C6 provides it over SDIO
+  # via ESP-Hosted. esp_wifi_remote forwards the standard esp_wifi_* APIs to it.
+  espressif/esp_wifi_remote: "*"
+  espressif/esp_hosted:
+    version: "*"
+    pre_release: true
+
+  # mDNS / Bonjour peer discovery.
+  espressif/mdns: "^1.2.0"

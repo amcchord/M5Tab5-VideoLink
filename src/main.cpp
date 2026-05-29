@@ -14,8 +14,30 @@
 
 #include "board/board.h"
 #include "ui/ui.h"
+#include "app/settings.h"
+#include "app/app_config.h"
+#include "net/wifi_manager.h"
+#include "net/discovery.h"
 
 static const char *TAG = "videolink";
+
+static void on_wifi_status(bool connected, esp_ip4_addr_t ip, const char *msg)
+{
+    char line[64];
+    if (connected) {
+        snprintf(line, sizeof(line), "%s  " IPSTR, msg, IP2STR(&ip));
+    } else {
+        snprintf(line, sizeof(line), "%s", msg);
+    }
+    ui::set_status(line);
+}
+
+static void on_peer_found(const net::Peer &peer)
+{
+    char line[80];
+    snprintf(line, sizeof(line), "peer: %s", peer.name);
+    ui::set_status(line);
+}
 
 static void init_nvs(void)
 {
@@ -38,7 +60,17 @@ extern "C" void app_main(void)
 
     ESP_ERROR_CHECK(board::init());
     ui::init();
-    ui::set_status("ready");
+
+    ESP_ERROR_CHECK(settings::init());
+    const settings::Config &cfg = settings::get();
+
+    if (net::wifi_init(on_wifi_status) == ESP_OK) {
+        net::wifi_apply();
+        const char *codec = cfg.codec == settings::VideoCodec::H264 ? "h264" : "mjpeg";
+        net::discovery_start(cfg.device_name, VIDEOLINK_RTSP_PORT, codec, on_peer_found);
+    } else {
+        ui::set_status("WiFi unavailable");
+    }
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));
