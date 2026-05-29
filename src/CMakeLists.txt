@@ -21,6 +21,7 @@ idf_component_register(
         esp_hosted
         mdns
         m5stack_tab5
+        esp_codec_dev
         esp_video
         esp_driver_jpeg
         esp_lvgl_port

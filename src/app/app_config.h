@@ -19,4 +19,9 @@
 // RTP payload types (dynamic range) we use for our media.
 #define VIDEOLINK_RTP_PT_JPEG     26   // RFC 2435 (static PT for JPEG)
 #define VIDEOLINK_RTP_PT_H264     96   // dynamic
-#define VIDEOLINK_RTP_PT_AUDIO    97   // dynamic (Opus / L16)
+#define VIDEOLINK_RTP_PT_AUDIO    97   // dynamic (L16 / Opus)
+
+// Audio: RTP/L16 mono over a dedicated UDP port (both peers rx on this port).
+#define VIDEOLINK_AUDIO_PORT      5008
+#define VIDEOLINK_AUDIO_RATE      16000
+#define VIDEOLINK_AUDIO_FRAME     320  // samples per packet (20 ms @ 16 kHz)

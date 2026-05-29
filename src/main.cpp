@@ -19,6 +19,7 @@
 #include "net/wifi_manager.h"
 #include "net/discovery.h"
 #include "media/video_pipeline.h"
+#include "media/audio.h"
 #include "rtsp/link.h"
 
 static const char *TAG = "videolink";
@@ -40,6 +41,7 @@ static void on_peer_found(const net::Peer &peer)
     snprintf(line, sizeof(line), "peer: %s", peer.name);
     ui::set_status(line);
     rtsp::link_on_peer(peer);
+    media::audio_set_peer(peer.ip);
 }
 
 static void init_nvs(void)
@@ -82,6 +84,10 @@ extern "C" void app_main(void)
     esp_err_t merr = media::pipeline_start(tx_codec, cfg.quality, rtsp::link_on_encoded);
     if (merr != ESP_OK) {
         ESP_LOGW(TAG, "media pipeline did not start: %s", esp_err_to_name(merr));
+    }
+
+    if (media::audio_init(cfg.volume, cfg.mic_gain, cfg.mic_muted) != ESP_OK) {
+        ESP_LOGW(TAG, "audio did not start");
     }
 
     while (true) {
